@@ -1,4 +1,3 @@
-
 ```js
 // script.js
 (function(){
@@ -267,4 +266,5 @@
         initApp();
     }
 })();
+
 ```

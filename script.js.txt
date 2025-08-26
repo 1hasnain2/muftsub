@@ -1,0 +1,270 @@
+
+```js
+// script.js
+(function(){
+    // Constants
+    const DAY_MS = 24 * 60 * 60 * 1000;
+    const HOUR_8_MS = 8 * 60 * 60 * 1000;
+    const HOUR_16_MS = 16 * 60 * 60 * 1000;
+    const MAX_CLICKS = 100;
+    const PASSWORD = "6692";
+
+    // Data loading functions
+    function loadLinks() {
+        try {
+            const raw = localStorage.getItem("channelLinks");
+            return raw ? JSON.parse(raw) : [];
+        } catch(e) {
+            return [];
+        }
+    }
+
+    function loadBlocked() {
+        try {
+            const raw = localStorage.getItem("blockedLinks");
+            return new Set(raw ? JSON.parse(raw) : []);
+        } catch(e) {
+            return new Set();
+        }
+    }
+
+    function loadUserLinks() {
+        try {
+            const raw = localStorage.getItem("userLinks");
+            return new Set(raw ? JSON.parse(raw) : []);
+        } catch(e) {
+            return new Set();
+        }
+    }
+
+    // Initialize data
+    let links = loadLinks();
+    let blocked = loadBlocked();
+    let userLinks = loadUserLinks();
+
+    // Data saving functions
+    function saveLinks() {
+        localStorage.setItem("channelLinks", JSON.stringify(links));
+    }
+    
+    function saveBlocked() {
+        localStorage.setItem("blockedLinks", JSON.stringify(Array.from(blocked)));
+    }
+
+    function saveUserLinks() {
+        localStorage.setItem("userLinks", JSON.stringify(Array.from(userLinks)));
+    }
+
+    // UI helper functions
+    function getCountdownClass(addedTime) {
+        const elapsed = Date.now() - addedTime;
+        if (elapsed < HOUR_8_MS) return "countdown-green";
+        if (elapsed < HOUR_16_MS) return "countdown-yellow";
+        return "countdown-red";
+    }
+
+    function formatCountdown(addedTime) {
+        let remaining = DAY_MS - (Date.now() - addedTime);
+        if (remaining < 0) remaining = 0;
+        const h = Math.floor(remaining / (1000 * 60 * 60));
+        const m = Math.floor((remaining % (1000 * 60 * 60)) / (1000 * 60));
+        const s = Math.floor((remaining % (1000 * 60)) / 1000);
+        return `${String(h).padStart(2,'0')}:${String(m).padStart(2,'0')}:${String(s).padStart(2,'0')}`;
+    }
+
+    function getStatusBadge(linkObj) {
+        if (linkObj.clicks >= 1) {
+            return `<span class="badge badge-success">Subscribed</span>`;
+        } else {
+            return `<span class="badge badge-warning">Pending</span>`;
+        }
+    }
+
+    function updateUserProgress() {
+        const progress = (userLinks.size / 1) * 100;
+        document.getElementById('userProgress').style.width = `${Math.min(progress, 100)}%`;
+        
+        if (userLinks.size >= 1) {
+            document.getElementById('userLimitMessage').textContent = 'Password required for additional entries';
+            document.getElementById('userLimitMessage').style.color = '#dc3545';
+            document.getElementById('passwordContainer').style.display = 'block';
+        } else {
+            document.getElementById('userLimitMessage').textContent = 'You can add your first channel freely';
+            document.getElementById('userLimitMessage').style.color = '';
+            document.getElementById('passwordContainer').style.display = 'none';
+        }
+    }
+
+    function displayLinks() {
+        const tbody = document.querySelector("#linkTable tbody");
+        tbody.innerHTML = "";
+        
+        if (links.length === 0) {
+            tbody.innerHTML = `<tr><td colspan="6" class="text-center">No channels added yet</td></tr>`;
+            return;
+        }
+        
+        links.forEach((linkObj, index) => {
+            const tr = document.createElement("tr");
+            const countdownClass = getCountdownClass(linkObj.addedTime);
+            
+            tr.innerHTML = `
+                <td>${index + 1}</td>
+                <td><a href="https://${linkObj.url}" target="_blank" class="channel-link">${linkObj.url}</a></td>
+                <td>${getStatusBadge(linkObj)}</td>
+                <td class="${countdownClass}">${formatCountdown(linkObj.addedTime)}</td>
+                <td>${linkObj.clicks}/${MAX_CLICKS}</td>
+                <td>
+                    <button class="btn btn-sm" onclick="handleChannelClick(${index})" ${linkObj.clicks >= 1 ? 'disabled' : ''}>
+                        ${linkObj.clicks >= 1 ? '<i class="fas fa-check"></i> Done' : '<i class="fas fa-external-link-alt"></i> Open'}
+                    </button>
+                </td>
+            `;
+            tbody.appendChild(tr);
+        });
+    }
+
+    // Event handlers
+    window.addLink = function() {
+        const inputEl = document.getElementById("channelLink");
+        const linkInput = (inputEl.value || "").trim().replace(/^https?:\/\//, '');
+        const ytRegex = /^(www\.)?youtube\.com\/@[a-zA-Z0-9_\-]+\/?$/;
+
+        if (!ytRegex.test(linkInput)) {
+            alert("Please enter a valid YouTube channel link in the format:\n\nwww.youtube.com/@username");
+            return;
+        }
+
+        // Check if this is not the first entry
+        if (userLinks.size >= 1) {
+            const passwordInput = document.getElementById("addPassword").value;
+            if (passwordInput !== PASSWORD) {
+                alert("Password required for additional entries.");
+                return;
+            }
+        }
+
+        // Check if link is already in the list (active)
+        if (links.some(l => l.url === linkInput)) {
+            alert("This channel link has already been added.");
+            return;
+        }
+
+        links.push({ 
+            url: linkInput, 
+            clicks: 0, 
+            addedTime: Date.now(), 
+            userAdded: true
+        });
+        
+        userLinks.add(linkInput);
+        saveLinks();
+        saveUserLinks();
+        displayLinks();
+        updateUserProgress();
+        inputEl.value = "";
+        document.getElementById("addPassword").value = "";
+        
+        // Show success message
+        const successAlert = document.createElement('div');
+        successAlert.className = 'alert alert-success';
+        successAlert.innerHTML = '<i class="fas fa-check-circle"></i> Channel added successfully! Please subscribe to all channels in the list.';
+        document.querySelector('.card').appendChild(successAlert);
+        
+        setTimeout(() => {
+            successAlert.remove();
+        }, 5000);
+    };
+
+    window.handleChannelClick = function(index) {
+        if (!links[index]) return;
+
+        // Prevent multiple clicks on the same link
+        if (links[index].clicks >= 1) {
+            alert("You can only click this link once.");
+            return;
+        }
+
+        links[index].clicks++;
+        
+        // Block after one click
+        if (links[index].clicks >= 1) {
+            blocked.add(links[index].url);
+        }
+
+        saveLinks();
+        saveBlocked();
+        displayLinks();
+        window.open("https://" + links[index].url, "_blank");
+    };
+
+    window.showClearPassword = function() {
+        document.getElementById('clearPasswordContainer').style.display = 'block';
+    };
+
+    window.verifyClearPassword = function() {
+        const password = document.getElementById('clearPassword').value;
+        if (password === PASSWORD) {
+            // Clear all links
+            links = [];
+            // Clear user links
+            userLinks.clear();
+            saveLinks();
+            saveUserLinks();
+            displayLinks();
+            updateUserProgress();
+            
+            // Hide password field
+            document.getElementById('clearPasswordContainer').style.display = 'none';
+            document.getElementById('clearPassword').value = '';
+            
+            // Show success message
+            alert("All links have been cleared.");
+        } else {
+            alert("Incorrect password. Please try again.");
+        }
+    };
+
+    function checkExpiry() {
+        const now = Date.now();
+        const next = [];
+        links.forEach(l => {
+            if (now - l.addedTime < DAY_MS) {
+                next.push(l);
+            } else {
+                blocked.add(l.url);
+                if (l.userAdded) {
+                    userLinks.delete(l.url);
+                }
+            }
+        });
+        links = next;
+        saveLinks();
+        saveBlocked();
+        saveUserLinks();
+    }
+
+    // Initialize application
+    function initApp() {
+        links = loadLinks();
+        blocked = loadBlocked();
+        userLinks = loadUserLinks();
+        checkExpiry();
+        displayLinks();
+        updateUserProgress();
+
+        // Update countdown every second
+        setInterval(() => {
+            checkExpiry();
+            displayLinks();
+        }, 1000);
+    }
+
+    // Start the application when DOM is loaded
+    if (document.readyState === 'loading') {
+        document.addEventListener('DOMContentLoaded', initApp);
+    } else {
+        initApp();
+    }
+})();
+```

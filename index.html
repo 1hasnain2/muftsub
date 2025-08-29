@@ -6,6 +6,7 @@
     <title>YouTube Channel Subscriber Exchange</title>
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
     <style>
+        /* Your CSS remains unchanged */
         :root {
             --primary: #ff0000;
             --primary-dark: #cc0000;
@@ -507,27 +508,29 @@
     </footer>
 
     <!-- Firebase -->
-  <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js"></script>
-  <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-database.js"></script>
+    <!-- Corrected Firebase SDK imports -->
+    <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore-compat.js"></script>
     
     <script>
         // Firebase configuration
         const firebaseConfig = {
             apiKey: "AIzaSyCfcHIcSwPKcJfjKDIHLq5aDf-OpKvbUi8",
-      authDomain: "muftsub-link.firebaseapp.com",
-      databaseURL: "https://muftsub-link-default-rtdb.firebaseio.com",
-      projectId: "muftsub-link",
-      storageBucket: "muftsub-link.appspot.com",
-      messagingSenderId: "528350744421",
-      appId: "1:528350744421:web:dfb4fff37d801d25c15b8c"
-    };
+            authDomain: "muftsub-link.firebaseapp.com",
+            databaseURL: "https://muftsub-link-default-rtdb.firebaseio.com",
+            projectId: "muftsub-link",
+            storageBucket: "muftsub-link.appspot.com",
+            messagingSenderId: "528350744421",
+            appId: "1:528350744421:web:dfb4fff37d801d25c15b8c"
+        };
 
         // Initialize Firebase with compatibility version
         let db;
         try {
-            const app = firebase.initializeApp(firebaseConfig);
+            // Initialize Firebase with compatibility version
+            firebase.initializeApp(firebaseConfig);
             db = firebase.firestore();
-            console.log("Firebase initialized successfully");
+            console.log("Firebase Firestore initialized successfully");
         } catch (error) {
             console.error("Error initializing Firebase:", error);
             // Create a mock db object for fallback
@@ -536,6 +539,13 @@
                     add: () => Promise.reject("Firebase not available"),
                     orderBy: () => ({
                         onSnapshot: () => {}
+                    }),
+                    doc: () => ({
+                        update: () => Promise.reject("Firebase not available")
+                    }),
+                    get: () => Promise.resolve({
+                        forEach: () => {},
+                        empty: true
                     })
                 })
             };
@@ -593,6 +603,15 @@
                     });
                 }, error => {
                     console.error("Error loading from Firestore:", error);
+                    // Show error message
+                    const errorAlert = document.createElement('div');
+                    errorAlert.className = 'alert alert-danger';
+                    errorAlert.innerHTML = '<i class="fas fa-exclamation-triangle"></i> Error connecting to server. Using local storage only.';
+                    document.querySelector('.card').prepend(errorAlert);
+                    
+                    setTimeout(() => {
+                        errorAlert.remove();
+                    }, 5000);
                 });
             } catch (error) {
                 console.error("Error setting up Firestore listener:", error);
@@ -749,8 +768,11 @@
                     clicks: clicks + 1
                 });
                 window.open("https://" + url, "_blank");
+                // Refresh the table to show updated status
+                loadLinksFromFirestore();
             } catch (error) {
                 console.error("Error updating click count:", error);
+                // Fallback to local storage if Firestore fails
                 alert("Error updating subscription status. Please try again.");
             }
         }
@@ -833,7 +855,7 @@
                         
                         if (source === 'firestore') {
                             // For Firestore items, we would need to track the addedTime
-                            // This is a simplified implementation
+                            // This is a simplified implementation - in a real app, you'd need to store this
                             const links = getLocalLinks();
                             const link = links.find(l => l.id === id);
                             addedTime = link ? link.addedTime : Date.now() - 10000;

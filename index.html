@@ -434,9 +434,8 @@
         
         <div class="alert alert-danger text-urdu">
             <h3><i class="fas fa-exclamation-circle"></i> تنبیہ</h3>
-            <p>اگر آپ نے اپنا لنک انٹر کرکے 24 گھنٹے تک غفلت برتی اور صرف ایک یا چند چینلز سبسکرائب کئے جبکہ باقی 100 چینلز سبسکرائب نہ کئے تو آپ کا <strong>پہلا اور آخری فری چانس</strong> ہمیشہ کے لئے ختم ہوجائے گا، چینل لنک ڈلیٹ کردیا جائے گا، دوسرا فری چانس نہیں ملے گا، سبسکرائبرز نہیں دئے جائیں گے، اور 100 سے کم سبسکرائب کرنے کی صورت میں آپ کو ملے ہوئے سبسکرائبرز بھی <strong>ڈلیٹ</strong> کردئے جائیں گے۔</p>
+            <p>اگر آپ نے اپنا لنک انٹر کرکے 24 گھنٹے تک غفلت برتی اور صرف ایک یا چند چینلز سبسکرائب کئے جبکہ باقی 100 چینلز سبسکرائب نہ کئے تو آپ کا <strong>پہلا اور آخری فری چانس</strong> ہمیشہ کے لئے ختم ہوجائے گا، چینل لنک ڈلیٹ کردیا جائے گا، دوسرا فری چانس نہیں ملے گا، سبسکرائبرز نہیں دئے جائیں گے، اور 100 سے کم سبسکرائب کرنے کی صورت میں آپ کو ملے ہوئے سبسکرائبرز بھی <strong>ڈلیٹ</strong> کردئے جائیں گے۔</p></p>
         </div>
-        
         <div class="card">
             <h2><i class="fas fa-list-ol"></i> Channel List</h2>
             <p>Subscribe to all channels below to receive your free organic subscribers.</p>
@@ -507,23 +506,40 @@
         </div>
     </footer>
 
-    <script src="https://www.gstatic.com/firebasejs/9.6.11/firebase-app-compat.js"></script>
-    <script src="https://www.gstatic.com/firebasejs/9.6.11/firebase-firestore-compat.js"></script>
+    <!-- Firebase -->
+  <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-database.js"></script>
     
     <script>
         // Firebase configuration
         const firebaseConfig = {
             apiKey: "AIzaSyCfcHIcSwPKcJfjKDIHLq5aDf-OpKvbUi8",
-            authDomain: "muftsub-links.firebaseapp.com",
-            projectId: "muftsub-links",
-            storageBucket: "muftsub-link.firebasestorage.app",
-            messagingSenderId: "528350744421",
-            appId: "1:528350744421:web:dfb4fff37d801d25c15b8c"
-        };
+      authDomain: "muftsub-link.firebaseapp.com",
+      databaseURL: "https://muftsub-link-default-rtdb.firebaseio.com",
+      projectId: "muftsub-link",
+      storageBucket: "muftsub-link.appspot.com",
+      messagingSenderId: "528350744421",
+      appId: "1:528350744421:web:dfb4fff37d801d25c15b8c"
+    };
 
         // Initialize Firebase with compatibility version
-        const app = firebase.initializeApp(firebaseConfig);
-        const db = firebase.firestore();
+        let db;
+        try {
+            const app = firebase.initializeApp(firebaseConfig);
+            db = firebase.firestore();
+            console.log("Firebase initialized successfully");
+        } catch (error) {
+            console.error("Error initializing Firebase:", error);
+            // Create a mock db object for fallback
+            db = {
+                collection: () => ({
+                    add: () => Promise.reject("Firebase not available"),
+                    orderBy: () => ({
+                        onSnapshot: () => {}
+                    })
+                })
+            };
+        }
 
         // Constants
         const DAY_MS = 24 * 60 * 60 * 1000;
@@ -541,42 +557,46 @@
         function loadLinksFromFirestore() {
             const tbody = document.querySelector("#linkTable tbody");
             
-            db.collection("channelLinks").orderBy("addedTime", "desc").onSnapshot(snapshot => {
-                // Clear existing rows
-                const firestoreRows = tbody.querySelectorAll('[data-source="firestore"]');
-                firestoreRows.forEach(row => row.remove());
-                
-                if (snapshot.empty) {
-                    if (tbody.children.length === 0) {
-                        tbody.innerHTML = `<tr><td colspan="6" class="text-center">No channels added yet</td></tr>`;
-                    }
-                    return;
-                }
-                
-                let index = 1;
-                snapshot.forEach(doc => {
-                    const data = doc.data();
-                    const remaining = Math.max(0, DAY_MS - (Date.now() - data.addedTime));
-                    const h = String(Math.floor(remaining / 3600000)).padStart(2, '0');
-                    const m = String(Math.floor((remaining % 3600000) / 60000)).padStart(2, '0');
-                    const s = String(Math.floor((remaining % 60000) / 1000)).padStart(2, '0');
+            try {
+                db.collection("channelLinks").orderBy("addedTime", "desc").onSnapshot(snapshot => {
+                    // Clear existing rows
+                    const firestoreRows = tbody.querySelectorAll('[data-source="firestore"]');
+                    firestoreRows.forEach(row => row.remove());
                     
-                    const tr = document.createElement("tr");
-                    tr.setAttribute("data-source", "firestore");
-                    tr.setAttribute("data-id", doc.id);
-                    tr.innerHTML = `
-                        <td>${index++}</td>
-                        <td><a href="https://${data.url}" target="_blank">${data.url}</a></td>
-                        <td>${data.clicks >= 1 ? '<span class="badge badge-success">Subscribed</span>' : '<span class="badge badge-warning">Pending</span>'}</td>
-                        <td>${h}:${m}:${s}</td>
-                        <td>${data.clicks}/${MAX_CLICKS}</td>
-                        <td><button class="btn btn-sm" onclick="handleChannelClick('${doc.id}','${data.url}',${data.clicks})" ${data.clicks>=1 ? 'disabled' : ''}>${data.clicks>=1 ? 'Done' : 'Open'}</button></td>
-                    `;
-                    tbody.appendChild(tr);
+                    if (snapshot.empty) {
+                        if (tbody.children.length === 0) {
+                            tbody.innerHTML = `<tr><td colspan="6" class="text-center">No channels added yet</td></tr>`;
+                        }
+                        return;
+                    }
+                    
+                    let index = 1;
+                    snapshot.forEach(doc => {
+                        const data = doc.data();
+                        const remaining = Math.max(0, DAY_MS - (Date.now() - data.addedTime));
+                        const h = String(Math.floor(remaining / 3600000)).padStart(2, '0');
+                        const m = String(Math.floor((remaining % 3600000) / 60000)).padStart(2, '0');
+                        const s = String(Math.floor((remaining % 60000) / 1000)).padStart(2, '0');
+                        
+                        const tr = document.createElement("tr");
+                        tr.setAttribute("data-source", "firestore");
+                        tr.setAttribute("data-id", doc.id);
+                        tr.innerHTML = `
+                            <td>${index++}</td>
+                            <td><a href="https://${data.url}" target="_blank">${data.url}</a></td>
+                            <td>${data.clicks >= 1 ? '<span class="badge badge-success">Subscribed</span>' : '<span class="badge badge-warning">Pending</span>'}</td>
+                            <td>${h}:${m}:${s}</td>
+                            <td>${data.clicks}/${MAX_CLICKS}</td>
+                            <td><button class="btn btn-sm" onclick="handleChannelClick('${doc.id}','${data.url}',${data.clicks})" ${data.clicks>=1 ? 'disabled' : ''}>${data.clicks>=1 ? 'Done' : 'Open'}</button></td>
+                        `;
+                        tbody.appendChild(tr);
+                    });
+                }, error => {
+                    console.error("Error loading from Firestore:", error);
                 });
-            }, error => {
-                console.error("Error loading from Firestore:", error);
-            });
+            } catch (error) {
+                console.error("Error setting up Firestore listener:", error);
+            }
         }
 
         // Load links from local storage
@@ -651,8 +671,9 @@
 
             try {
                 // Save to Firestore
+                const cleanUrl = linkInput.replace(/^https?:\/\//, '');
                 await db.collection("channelLinks").add({
-                    url: linkInput.replace(/^https?:\/\//, ''),
+                    url: cleanUrl,
                     clicks: 0,
                     addedTime: Date.now()
                 });
@@ -661,7 +682,7 @@
                 const localLinks = getLocalLinks();
                 localLinks.push({
                     id: Date.now().toString(),
-                    url: linkInput.replace(/^https?:\/\//, ''),
+                    url: cleanUrl,
                     clicks: 0,
                     addedTime: Date.now()
                 });
@@ -682,13 +703,14 @@
                 // Refresh the list
                 loadLinksFromLocalStorage();
             } catch (error) {
-                console.error("Error adding channel:", error);
+                console.error("Error adding channel to Firestore:", error);
                 
                 // Fallback: Save only to local storage if Firestore fails
+                const cleanUrl = linkInput.replace(/^https?:\/\//, '');
                 const localLinks = getLocalLinks();
                 localLinks.push({
                     id: Date.now().toString(),
-                    url: linkInput.replace(/^https?:\/\//, ''),
+                    url: cleanUrl,
                     clicks: 0,
                     addedTime: Date.now()
                 });

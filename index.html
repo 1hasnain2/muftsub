@@ -6,7 +6,6 @@
     <title>YouTube Channel Subscriber Exchange</title>
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
     <style>
-        /* Your CSS remains unchanged */
         :root {
             --primary: #ff0000;
             --primary-dark: #cc0000;
@@ -508,7 +507,6 @@
     </footer>
 
     <!-- Firebase -->
-    <!-- Corrected Firebase SDK imports -->
     <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
     <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore-compat.js"></script>
     
@@ -527,7 +525,6 @@
         // Initialize Firebase with compatibility version
         let db;
         try {
-            // Initialize Firebase with compatibility version
             firebase.initializeApp(firebaseConfig);
             db = firebase.firestore();
             console.log("Firebase Firestore initialized successfully");
@@ -555,12 +552,22 @@
         const DAY_MS = 24 * 60 * 60 * 1000;
         const MAX_CLICKS = 100;
         const PASSWORD = "6692";
-        const LOCAL_STORAGE_KEY = "youtubeChannelLinks";
+        const LINK_COUNT_KEY = "userLinkCount";
 
-        // Load links from both Firestore and local storage
+        // Load links from Firestore
         function loadLinks() {
             loadLinksFromFirestore();
-            loadLinksFromLocalStorage();
+            checkLinkCount();
+        }
+
+        // Check if user has already added a link
+        function checkLinkCount() {
+            const linkCount = localStorage.getItem(LINK_COUNT_KEY) || 0;
+            if (parseInt(linkCount) >= 1) {
+                document.getElementById('passwordContainer').style.display = 'block';
+                document.getElementById('userLimitMessage').textContent = 
+                    'You need to enter password to add additional channels';
+            }
         }
 
         // Load links from Firestore
@@ -606,7 +613,7 @@
                     // Show error message
                     const errorAlert = document.createElement('div');
                     errorAlert.className = 'alert alert-danger';
-                    errorAlert.innerHTML = '<i class="fas fa-exclamation-triangle"></i> Error connecting to server. Using local storage only.';
+                    errorAlert.innerHTML = '<i class="fas fa-exclamation-triangle"></i> Error connecting to server.';
                     document.querySelector('.card').prepend(errorAlert);
                     
                     setTimeout(() => {
@@ -618,53 +625,10 @@
             }
         }
 
-        // Load links from local storage
-        function loadLinksFromLocalStorage() {
-            const tbody = document.querySelector("#linkTable tbody");
-            const localLinks = getLocalLinks();
-            
-            // Clear existing local storage rows
-            const localRows = tbody.querySelectorAll('[data-source="local"]');
-            localRows.forEach(row => row.remove());
-            
-            if (localLinks.length === 0) return;
-            
-            let index = 1;
-            localLinks.forEach(link => {
-                const remaining = Math.max(0, DAY_MS - (Date.now() - link.addedTime));
-                const h = String(Math.floor(remaining / 3600000)).padStart(2, '0');
-                const m = String(Math.floor((remaining % 3600000) / 60000)).padStart(2, '0');
-                const s = String(Math.floor((remaining % 60000) / 1000)).padStart(2, '0');
-                
-                const tr = document.createElement("tr");
-                tr.setAttribute("data-source", "local");
-                tr.setAttribute("data-id", link.id);
-                tr.innerHTML = `
-                    <td>${index++}</td>
-                    <td><a href="https://${link.url}" target="_blank">${link.url}</a></td>
-                    <td>${link.clicks >= 1 ? '<span class="badge badge-success">Subscribed</span>' : '<span class="badge badge-warning">Pending</span>'}</td>
-                    <td>${h}:${m}:${s}</td>
-                    <td>${link.clicks}/${MAX_CLICKS}</td>
-                    <td><button class="btn btn-sm" onclick="handleLocalChannelClick('${link.id}','${link.url}',${link.clicks})" ${link.clicks>=1 ? 'disabled' : ''}>${link.clicks>=1 ? 'Done' : 'Open'}</button></td>
-                `;
-                tbody.appendChild(tr);
-            });
-        }
-
-        // Get links from local storage
-        function getLocalLinks() {
-            const linksJson = localStorage.getItem(LOCAL_STORAGE_KEY);
-            return linksJson ? JSON.parse(linksJson) : [];
-        }
-
-        // Save links to local storage
-        function saveLocalLinks(links) {
-            localStorage.setItem(LOCAL_STORAGE_KEY, JSON.stringify(links));
-        }
-
         // Add a new channel link
         async function addLink() {
             const inputEl = document.getElementById("channelLink");
+            const passwordInput = document.getElementById("addPassword");
             const linkInput = (inputEl.value || "").trim();
             const ytRegex = /^(https?:\/\/)?(www\.)?youtube\.com\/@[a-zA-Z0-9_\-]+\/?$/;
             
@@ -688,6 +652,20 @@
                 return;
             }
 
+            // Check if this is the second link attempt
+            const linkCount = parseInt(localStorage.getItem(LINK_COUNT_KEY) || 0);
+            
+            if (linkCount >= 1) {
+                // Require password for second and subsequent links
+                const enteredPassword = passwordInput.value;
+                if (enteredPassword !== PASSWORD) {
+                    alert("Incorrect password. Please enter the correct password to add additional channels.");
+                    addButton.innerHTML = originalText;
+                    addButton.disabled = false;
+                    return;
+                }
+            }
+
             try {
                 // Save to Firestore
                 const cleanUrl = linkInput.replace(/^https?:\/\//, '');
@@ -697,22 +675,23 @@
                     addedTime: Date.now()
                 });
 
-                // Also save to local storage
-                const localLinks = getLocalLinks();
-                localLinks.push({
-                    id: Date.now().toString(),
-                    url: cleanUrl,
-                    clicks: 0,
-                    addedTime: Date.now()
-                });
-                saveLocalLinks(localLinks);
-
+                // Update link count
+                localStorage.setItem(LINK_COUNT_KEY, linkCount + 1);
+                
+                // Show password field for next time if needed
+                if (linkCount === 0) {
+                    document.getElementById('passwordContainer').style.display = 'block';
+                    document.getElementById('userLimitMessage').textContent = 
+                        'You need to enter password to add additional channels';
+                }
+                
                 inputEl.value = "";
+                passwordInput.value = "";
                 
                 // Show success message
                 const successAlert = document.createElement('div');
                 successAlert.className = 'alert alert-success';
-                successAlert.innerHTML = '<i class="fas fa-check-circle"></i> Channel added successfully to both Firestore and local storage!';
+                successAlert.innerHTML = '<i class="fas fa-check-circle"></i> Channel added successfully!';
                 document.querySelector('.add-channel-section').appendChild(successAlert);
                 
                 setTimeout(() => {
@@ -720,35 +699,19 @@
                 }, 5000);
                 
                 // Refresh the list
-                loadLinksFromLocalStorage();
+                loadLinksFromFirestore();
             } catch (error) {
                 console.error("Error adding channel to Firestore:", error);
                 
-                // Fallback: Save only to local storage if Firestore fails
-                const cleanUrl = linkInput.replace(/^https?:\/\//, '');
-                const localLinks = getLocalLinks();
-                localLinks.push({
-                    id: Date.now().toString(),
-                    url: cleanUrl,
-                    clicks: 0,
-                    addedTime: Date.now()
-                });
-                saveLocalLinks(localLinks);
-                
-                inputEl.value = "";
-                
-                // Show success message for local storage only
-                const successAlert = document.createElement('div');
-                successAlert.className = 'alert alert-warning';
-                successAlert.innerHTML = '<i class="fas fa-check-circle"></i> Channel added to local storage (Firestore connection failed).';
-                document.querySelector('.add-channel-section').appendChild(successAlert);
+                // Show error message
+                const errorAlert = document.createElement('div');
+                errorAlert.className = 'alert alert-danger';
+                errorAlert.innerHTML = '<i class="fas fa-exclamation-triangle"></i> Error adding channel. Please try again.';
+                document.querySelector('.add-channel-section').appendChild(errorAlert);
                 
                 setTimeout(() => {
-                    successAlert.remove();
+                    errorAlert.remove();
                 }, 5000);
-                
-                // Refresh the list
-                loadLinksFromLocalStorage();
             } finally {
                 // Restore button state
                 addButton.innerHTML = originalText;
@@ -772,31 +735,8 @@
                 loadLinksFromFirestore();
             } catch (error) {
                 console.error("Error updating click count:", error);
-                // Fallback to local storage if Firestore fails
                 alert("Error updating subscription status. Please try again.");
             }
-        }
-
-        // Handle click on a local storage channel
-        function handleLocalChannelClick(id, url, clicks) {
-            if (clicks >= 1) {
-                alert("Already clicked this link.");
-                return;
-            }
-            
-            const localLinks = getLocalLinks();
-            const updatedLinks = localLinks.map(link => {
-                if (link.id === id) {
-                    return {...link, clicks: clicks + 1};
-                }
-                return link;
-            });
-            
-            saveLocalLinks(updatedLinks);
-            window.open("https://" + url, "_blank");
-            
-            // Refresh the list
-            loadLinksFromLocalStorage();
         }
 
         // Show password field for clearing links
@@ -817,9 +757,9 @@
             }
         }
 
-        // Clear all links from both Firestore and local storage
+        // Clear all links from Firestore
         async function clearAllLinks() {
-            // Clear Firestore (this would typically require backend logic)
+            // Clear Firestore
             try {
                 const snapshot = await db.collection("channelLinks").get();
                 const batch = db.batch();
@@ -827,12 +767,16 @@
                     batch.delete(doc.ref);
                 });
                 await batch.commit();
+                
+                // Reset link count
+                localStorage.setItem(LINK_COUNT_KEY, 0);
+                document.getElementById('passwordContainer').style.display = 'none';
+                document.getElementById('userLimitMessage').textContent = 
+                    'You can add your first channel freely';
             } catch (error) {
                 console.error("Error clearing Firestore data:", error);
+                alert('Error clearing links. Please try again.');
             }
-            
-            // Clear local storage
-            localStorage.removeItem(LOCAL_STORAGE_KEY);
             
             // Refresh the list
             loadLinks();
@@ -850,35 +794,14 @@
                     const id = row.getAttribute('data-id');
                     const timeCell = row.cells[3];
                     
-                    if (timeCell) {
-                        let addedTime;
-                        
-                        if (source === 'firestore') {
-                            // For Firestore items, we would need to track the addedTime
-                            // This is a simplified implementation - in a real app, you'd need to store this
-                            const links = getLocalLinks();
-                            const link = links.find(l => l.id === id);
-                            addedTime = link ? link.addedTime : Date.now() - 10000;
-                        } else {
-                            const links = getLocalLinks();
-                            const link = links.find(l => l.id === id);
-                            addedTime = link ? link.addedTime : Date.now() - 10000;
-                        }
-                        
-                        const remaining = Math.max(0, DAY_MS - (Date.now() - addedTime));
-                        const h = String(Math.floor(remaining / 3600000)).padStart(2, '0');
-                        const m = String(Math.floor((remaining % 3600000) / 60000)).padStart(2, '0');
-                        const s = String(Math.floor((remaining % 60000) / 1000)).padStart(2, '0');
+                    if (timeCell && source === 'firestore') {
+                        // This would need to be implemented with actual data from Firestore
+                        // For now, we'll just update the display with a placeholder
+                        const h = "00";
+                        const m = "00";
+                        const s = "00";
                         
                         timeCell.textContent = `${h}:${m}:${s}`;
-                        
-                        // Update status if time is up
-                        if (remaining === 0) {
-                            const statusCell = row.cells[2];
-                            if (statusCell.querySelector('.badge-warning')) {
-                                statusCell.innerHTML = '<span class="badge badge-danger">Expired</span>';
-                            }
-                        }
                     }
                 });
             }, 1000);
